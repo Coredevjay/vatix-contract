@@ -583,6 +583,9 @@ Part of the [Vatix Protocol](https://github.com/vatix-protocol)
 <!-- handsoff-issue-873 -->
 - #873: AUTH_TABLE 100% coverage + CI
 
+<!-- handsoff-issue-879 -->
+- #879: CEI audit findings remediated
+
 <!-- handsoff-issue-848 -->
 - #848: Market: create with metadata URI validation/caps
 
