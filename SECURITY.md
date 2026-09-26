@@ -4,6 +4,18 @@
 
 Please report suspected vulnerabilities privately to the maintainers (do not open a public issue). Include a description, impact, and reproduction steps. We aim to acknowledge reports within 72 hours.
 
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the contributor workflow and
+[`README.md`](./README.md) for the project overview and supported versions.
+
+## Supported Versions
+
+Security fixes are provided for the following versions:
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 0.1.x   | :white_check_mark: |
+| < 0.1   | :x:                |
+
 ## Scope
 
 This policy covers the Vatix-Protocol monorepo, including `vatix-contract` (Soroban contracts), the market/settlement paths, and the operational tooling under `scripts/`.
@@ -21,6 +33,25 @@ This policy covers the Vatix-Protocol monorepo, including `vatix-contract` (Soro
 Multi-contract upgrades are a privileged, money-path operation. The exact
 upgrade order, invariants, preconditions, and rollback steps are documented in
 [`scripts/upgrade/UPGRADE_PLAYBOOK.md`](scripts/upgrade/UPGRADE_PLAYBOOK.md).
+
+In-scope components:
+
+- `contracts/market` — market creation, trading, deposits, settlement
+- `contracts/treasury` — protocol fee custody and distribution
+- `contracts/resolution` — challenge-based outcome resolution
+- `contracts/outcome-token` — per-market YES/NO outcome tokens
+- Deployment/upgrade tooling under `scripts/` (e.g. `scripts/upgrade/`)
+- Issue/ops scripts under `scripts/issues/` — see
+  [`scripts/issues/README.md`](scripts/issues/README.md) for the quality bar
+  (idempotency, fail-closed writes, deny-by-default authz, no secrets in
+  repo or logs) that these scripts must meet
+- Documentation that describes on-chain invariants (`AUTH_TABLE.md`,
+  `docs/adr-001-oracle-adapter.md`, `docs/reentrancy-cei-audit.md`) where an
+  inaccuracy could lead to a mistaken security assumption
+
+## Invariants
+
+These invariants must hold on every network, including localnet:
 
 Key security invariants for upgrades:
 

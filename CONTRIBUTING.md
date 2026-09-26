@@ -21,6 +21,15 @@ match the repo layout and CI, and a dedicated section for the
 - Keep CI green; add a required check if a new surface is ungated.
 - Update docs and runbooks when behavior changes.
 
+## Reporting a security vulnerability
+
+Do **not** open a public issue, PR, or discussion for a suspected
+vulnerability. Follow the private disclosure process in
+[SECURITY.md](SECURITY.md) — it lists the supported versions, the in-scope
+surfaces, and the private reporting channels. If you are unsure whether
+something is a vulnerability, report it privately anyway; the maintainers
+will triage it.
+
 ## Toolchain and prerequisites
 
 Install these before building or testing so you can reproduce CI locally.
@@ -178,6 +187,31 @@ money-path state. They must meet the bar below before merge. See
 - **Idempotency.** Replayed or concurrent runs must be safe. Every write
   entrypoint takes a stable idempotency key and must not double-apply effects.
 - **Fail-closed writes.** On RPC/DB/Redis outage, writes abort with a typed
+error rather than partially applying
+
+## Before opening a PR
+
+Scripts under `scripts/issues/` are operational tooling that can touch
+money-path state. They must meet the bar below before merge. See
+[`scripts/issues/README.md`](scripts/issues/README.md) for the full reference.
+
+### Invariants
+
+- **Idempotency.** Replayed or concurrent runs must be safe. Every write
+  entrypoint takes a stable idempotency key and must not double-apply effects.
+- **Fail-closed writes.** On RPC/DB/Redis outage, writes abort with a typed
+
+  error rather than partially applying. Reads may degrade; writes must not.
+- **Deny-by-default authz.** Privileged surfaces require an explicit role and
+  reject untrusted callers. New privileged entrypoints start denied.
+- **No secrets.** Never log or commit secrets, keys, or tokens. Redact
+  sensitive fields in logs and metrics.
+
+### Error codes and correlation ids
+
+- Use stable, documented error codes for script entrypoints; do not reuse a
+  code for a different failure mode.
+- Propagate a 
   error rather than partially applying. Reads may degrade; writes must not.
 - **Deny-by-default authz.** Privileged surfaces require an explicit role and
   reject untrusted callers. New privileged entrypoints start denied.

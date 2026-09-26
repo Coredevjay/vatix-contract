@@ -14,6 +14,14 @@ use soroban_sdk::contracterror;
 /// - Reconciliation Errors: 80-89
 /// - Conservation Errors: 90-99
 ///
+/// # Stable not-found codes
+///
+/// Market lookups that fail because the requested market does not exist MUST
+/// return [`ContractError::MarketNotFound`] (`= 1`). This code is part of the
+/// public ABI: clients (e.g. `apps/web/lib/errors.ts`) map it to a stable,
+/// user-facing "market not found" error. Do not renumber or reuse it, and do
+/// not substitute a generic validation error for a missing market.
+///
 /// # Example
 /// ```ignore
 /// use vatix_market::error::ContractError;
@@ -33,6 +41,11 @@ pub enum ContractError {
     /// The requested market does not exist in storage.
     ///
     /// Returned when attempting to access a market with an invalid or non-existent ID.
+    ///
+    /// This is the single, stable not-found code for market lookups. Every
+    /// market entrypoint that resolves a `market_id` to a stored market MUST
+    /// return this variant when the lookup misses, so clients can rely on a
+    /// deterministic code instead of a generic failure.
     MarketNotFound = 1,
 
     /// Attempted to resolve a market that has already been resolved.
