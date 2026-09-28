@@ -31,7 +31,8 @@ fn topic_sym(env: &Env, topics: &[Val], idx: usize) -> Symbol {
 }
 
 fn data_map(env: &Env, data: Val) -> Map<Symbol, Val> {
-    data.try_into_val(env).expect("data must be a Map<Symbol,Val>")
+    data.try_into_val(env)
+        .expect("data must be a Map<Symbol,Val>")
 }
 
 fn data_u64(env: &Env, m: &Map<Symbol, Val>, key: &str) -> u64 {
@@ -68,7 +69,10 @@ fn event_contract_initialized_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 2, "contract_initialized_event has 2 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "contract_initialized_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "contract_initialized_event")
+    );
     let topic_admin: Address = topics[1].clone().into_val(&env);
     assert_eq!(topic_admin, admin);
 
@@ -98,7 +102,10 @@ fn event_market_created_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 2, "market_created_event has 2 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "market_created_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "market_created_event")
+    );
     let topic_id: u32 = topics[1].clone().into_val(&env);
     assert_eq!(topic_id, 1u32);
 
@@ -118,11 +125,17 @@ fn event_collateral_deposited_shape() {
     let (admin, cid) = register_contract(&env);
     let client = MarketContractClient::new(&env, &cid);
     let token_admin = Address::generate(&env);
-    let token = env.register_stellar_asset_contract_v2(token_admin).address();
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
     let mut params = MarketParams::default_valid(&env);
     params.collateral_token = token.clone();
     let mid = client.initialize_market(
-        &admin, &params.question, &params.end_time, &params.oracle_pubkey, &params.collateral_token,
+        &admin,
+        &params.question,
+        &params.end_time,
+        &params.oracle_pubkey,
+        &params.collateral_token,
     );
 
     let user = Address::generate(&env);
@@ -131,7 +144,10 @@ fn event_collateral_deposited_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "collateral_deposited_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "collateral_deposited_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "collateral_deposited_event")
+    );
     let topic_user: Address = topics[1].clone().into_val(&env);
     assert_eq!(topic_user, user);
     let topic_mid: u32 = topics[2].clone().into_val(&env);
@@ -151,11 +167,17 @@ fn event_collateral_withdrawn_shape() {
     let (admin, cid) = register_contract(&env);
     let client = MarketContractClient::new(&env, &cid);
     let token_admin = Address::generate(&env);
-    let token = env.register_stellar_asset_contract_v2(token_admin).address();
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
     let mut params = MarketParams::default_valid(&env);
     params.collateral_token = token.clone();
     let mid = client.initialize_market(
-        &admin, &params.question, &params.end_time, &params.oracle_pubkey, &params.collateral_token,
+        &admin,
+        &params.question,
+        &params.end_time,
+        &params.oracle_pubkey,
+        &params.collateral_token,
     );
 
     let user = Address::generate(&env);
@@ -165,7 +187,10 @@ fn event_collateral_withdrawn_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "collateral_withdrawn_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "collateral_withdrawn_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "collateral_withdrawn_event")
+    );
 
     let m = data_map(&env, data);
     assert_eq!(data_i128(&env, &m, "amount"), 500);
@@ -181,11 +206,17 @@ fn event_position_updated_shape() {
     let (admin, cid) = register_contract(&env);
     let client = MarketContractClient::new(&env, &cid);
     let token_admin = Address::generate(&env);
-    let token = env.register_stellar_asset_contract_v2(token_admin).address();
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
     let mut params = MarketParams::default_valid(&env);
     params.collateral_token = token.clone();
     let mid = client.initialize_market(
-        &admin, &params.question, &params.end_time, &params.oracle_pubkey, &params.collateral_token,
+        &admin,
+        &params.question,
+        &params.end_time,
+        &params.oracle_pubkey,
+        &params.collateral_token,
     );
 
     let user = Address::generate(&env);
@@ -195,7 +226,10 @@ fn event_position_updated_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "position_updated_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "position_updated_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "position_updated_event")
+    );
 
     let m = data_map(&env, data);
     assert_eq!(data_i128(&env, &m, "yes_shares"), 5_000);
@@ -227,7 +261,10 @@ fn event_market_resolved_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 2, "market_resolved_event has 2 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "market_resolved_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "market_resolved_event")
+    );
     let topic_mid: u32 = topics[1].clone().into_val(&env);
     assert_eq!(topic_mid, mid);
 
@@ -246,7 +283,9 @@ fn event_position_settled_shape() {
     let client = MarketContractClient::new(&env, &cid);
     let (oracle_pubkey, signing_key) = oracle_keypair(&env);
     let token_admin = Address::generate(&env);
-    let token = env.register_stellar_asset_contract_v2(token_admin).address();
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
 
     let mid = client.initialize_market(
         &admin,
@@ -266,7 +305,10 @@ fn event_position_settled_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "position_settled_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "position_settled_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "position_settled_event")
+    );
 
     let m = data_map(&env, data);
     assert_eq!(data_i128(&env, &m, "payout"), 10_000);
@@ -290,7 +332,10 @@ fn event_fee_collected_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "fee_collected_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "fee_collected_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "fee_collected_event")
+    );
     let topic_mid: u32 = topics[1].clone().into_val(&env);
     assert_eq!(topic_mid, 5u32);
 
@@ -315,7 +360,10 @@ fn event_treasury_initialized_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "treasury_initialized_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "treasury_initialized_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "treasury_initialized_event")
+    );
     let topic_admin: Address = topics[1].clone().into_val(&env);
     assert_eq!(topic_admin, admin);
 
@@ -335,17 +383,24 @@ fn event_candidate_proposed_shape() {
     let factory = Address::generate(&env);
     // market_contract here can be any address; mock_all_auths skips auth checks
     let market_contract = Address::generate(&env);
-    client.initialize(&admin, &factory, &market_contract).unwrap();
+    client
+        .initialize(&admin, &factory, &market_contract)
+        .unwrap();
 
     let proposer = Address::generate(&env);
     let sig = BytesN::from_array(&env, &[0xABu8; 64]);
     let uri = String::from_str(&env, "ipfs://evidence");
     let expiry = env.ledger().timestamp() + 3600;
-    client.propose(&proposer, &1u32, &true, &sig, &expiry, &uri, &300u64).unwrap();
+    client
+        .propose(&proposer, &1u32, &true, &sig, &expiry, &uri, &300u64)
+        .unwrap();
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "candidate_proposed_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "candidate_proposed_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "candidate_proposed_event")
+    );
     let topic_cid: u32 = topics[1].clone().into_val(&env);
     assert_eq!(topic_cid, 1u32);
     let topic_mid: u32 = topics[2].clone().into_val(&env);
@@ -365,13 +420,17 @@ fn event_candidate_challenged_shape() {
     let rid = env.register(ResolutionContract, ());
     let client = ResolutionContractClient::new(&env, &rid);
     let admin = Address::generate(&env);
-    client.initialize(&admin, &Address::generate(&env), &Address::generate(&env)).unwrap();
+    client
+        .initialize(&admin, &Address::generate(&env), &Address::generate(&env))
+        .unwrap();
 
     let proposer = Address::generate(&env);
     let sig = BytesN::from_array(&env, &[0xABu8; 64]);
     let uri = String::from_str(&env, "ipfs://evidence");
     let expiry = env.ledger().timestamp() + 600;
-    let cid = client.propose(&proposer, &2u32, &false, &sig, &expiry, &uri, &300u64).unwrap();
+    let cid = client
+        .propose(&proposer, &2u32, &false, &sig, &expiry, &uri, &300u64)
+        .unwrap();
 
     let challenger = Address::generate(&env);
     let challenge_uri = String::from_str(&env, "ipfs://challenge");
@@ -379,7 +438,10 @@ fn event_candidate_challenged_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "candidate_challenged_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "candidate_challenged_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "candidate_challenged_event")
+    );
 
     let m = data_map(&env, data);
     let ev_challenger: Address = data_addr(&env, &m, "challenger");
@@ -398,7 +460,9 @@ fn event_candidate_finalized_shape() {
     let rid = env.register(ResolutionContract, ());
     let client = ResolutionContractClient::new(&env, &rid);
     let admin = Address::generate(&env);
-    client.initialize(&admin, &Address::generate(&env), &Address::generate(&env)).unwrap();
+    client
+        .initialize(&admin, &Address::generate(&env), &Address::generate(&env))
+        .unwrap();
 
     env.ledger().with_mut(|l| l.timestamp = 1_000);
     let proposer = Address::generate(&env);
@@ -414,7 +478,10 @@ fn event_candidate_finalized_shape() {
 
     let (topics, data) = last_event(&env);
     assert_eq!(topics.len(), 3, "candidate_finalized_event has 3 topics");
-    assert_eq!(topic_sym(&env, &topics, 0), Symbol::new(&env, "candidate_finalized_event"));
+    assert_eq!(
+        topic_sym(&env, &topics, 0),
+        Symbol::new(&env, "candidate_finalized_event")
+    );
 
     let m = data_map(&env, data);
     assert_eq!(data_bool(&env, &m, "outcome"), true);

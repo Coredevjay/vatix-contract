@@ -118,8 +118,13 @@ fn full_protocol_loop_deposit_trade_resolve_settle() {
     // 1. Create the market.
     let question = String::from_str(&env, "Will the full loop settle?");
     let end_time = env.ledger().timestamp() + 86_400;
-    let market_id =
-        client.initialize_market(&admin, &question, &end_time, &oracle_pubkey, &collateral_token);
+    let market_id = client.initialize_market(
+        &admin,
+        &question,
+        &end_time,
+        &oracle_pubkey,
+        &collateral_token,
+    );
     assert_eq!(market_id, 1);
     assert_event_emitted(&env, "market_created");
 
@@ -200,8 +205,13 @@ fn full_protocol_loop_no_outcome_wins() {
 
     let question = String::from_str(&env, "Will NO win this round?");
     let end_time = env.ledger().timestamp() + 86_400;
-    let market_id =
-        client.initialize_market(&admin, &question, &end_time, &oracle_pubkey, &collateral_token);
+    let market_id = client.initialize_market(
+        &admin,
+        &question,
+        &end_time,
+        &oracle_pubkey,
+        &collateral_token,
+    );
     assert_eq!(market_id, 1);
 
     // Deposit and buy NO shares
@@ -266,8 +276,13 @@ fn full_protocol_loop_refund_path() {
 
     let question = String::from_str(&env, "Refund test?");
     let end_time = env.ledger().timestamp() + 86_400;
-    let market_id =
-        client.initialize_market(&admin, &question, &end_time, &oracle_pubkey, &collateral_token);
+    let market_id = client.initialize_market(
+        &admin,
+        &question,
+        &end_time,
+        &oracle_pubkey,
+        &collateral_token,
+    );
 
     let user = Address::generate(&env);
     let deposit = 75 * STROOPS_PER_USDC;
@@ -275,7 +290,13 @@ fn full_protocol_loop_refund_path() {
     client.deposit_collateral(&user, &market_id, &deposit);
 
     // Buy both YES and NO shares (mixed position) to test refund path
-    client.update_position(&user, &market_id, &(40 * STROOPS_PER_USDC), &(35 * STROOPS_PER_USDC), &5_000i128);
+    client.update_position(
+        &user,
+        &market_id,
+        &(40 * STROOPS_PER_USDC),
+        &(35 * STROOPS_PER_USDC),
+        &5_000i128,
+    );
 
     // Resolve with a YES outcome via oracle; then manually set result to None
     // in storage to simulate the "no-winner" refund path.
@@ -308,11 +329,11 @@ fn full_protocol_loop_refund_path() {
 /// calling `initialize_market` again must be rejected.
 #[test]
 fn duplicate_market_id_creation_is_rejected() {
+    use soroban_sdk::{BytesN, String};
     use vatix_market_contract::{
         error::ContractError,
         types::{Market, MarketStatus},
     };
-    use soroban_sdk::{BytesN, String};
 
     let (env, admin, contract_id) = init_contract();
     let client = MarketContractClient::new(&env, &contract_id);

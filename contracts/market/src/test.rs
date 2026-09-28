@@ -505,7 +505,7 @@ mod test {
         let end_time = env.ledger().timestamp() + 86400;
         let oracle_pubkey = BytesN::from_array(&env, &[1u8; 32]);
         let collateral_token = Address::generate(&env);
-        let long_str = "a".repeat(2049);
+        let long_str = "a".repeat(crate::validation::MAX_METADATA_URI_LENGTH as usize + 1);
         let metadata_uri = Some(String::from_str(&env, &long_str));
 
         client.initialize_market(
@@ -1357,7 +1357,10 @@ mod test {
 
         // Verify event was emitted
         let events = env.events().all();
-        assert!(events.len() > 0, "OracleAdaptersEnabled event should be emitted");
+        assert!(
+            events.len() > 0,
+            "OracleAdaptersEnabled event should be emitted"
+        );
     }
 
     #[test]
@@ -2991,8 +2994,8 @@ mod test {
         let end_time = env.ledger().timestamp() + 86_400;
         let oracle_pubkey = BytesN::from_array(&env, &[7u8; 32]);
         let collateral_token = Address::generate(&env);
-        let market_id = client.initialize_market( dev
-            &admin,
+        let market_id = client.initialize_market(
+            dev & admin,
             &question,
             &end_time,
             &oracle_pubkey,
@@ -3230,7 +3233,10 @@ mod test {
 
         // A second void is rejected — no silent double-transition.
         let result = client.try_void_market(&resolution, &market_id);
-        assert_eq!(result, Err(Ok(crate::error::ContractError::MarketNotActive)));
+        assert_eq!(
+            result,
+            Err(Ok(crate::error::ContractError::MarketNotActive))
+        );
     }
 
     #[test]
@@ -3391,7 +3397,9 @@ mod test {
         // First tighten to 1_000 bps.
         client.set_fee_cap(&admin, &1_000i128);
         // A rate at 900 should be fine.
-        client.try_set_fee_rate(&admin, &900i128).expect("900 <= 1_000 cap");
+        client
+            .try_set_fee_rate(&admin, &900i128)
+            .expect("900 <= 1_000 cap");
 
         // Re-tighten to 500 bps.
         client.set_fee_cap(&admin, &500i128);
@@ -3502,7 +3510,9 @@ mod test {
 
         // Propose, cancel, then propose again with a different rate.
         client.set_fee_rate(&admin, &100i128);
-        client.cancel_fee_rate_change(&admin).expect("cancel should succeed");
+        client
+            .cancel_fee_rate_change(&admin)
+            .expect("cancel should succeed");
 
         client.set_fee_rate(&admin, &200i128);
         let pending = client
@@ -3567,7 +3577,9 @@ mod test {
 
         // Verify that we can resolve via Ed25519 before adapters are enabled
         let market_id_str = String::from_str(&env, "1");
-        assert!(client.resolve_market(&market_id_str, &outcome, &signature).is_ok());
+        assert!(client
+            .resolve_market(&market_id_str, &outcome, &signature)
+            .is_ok());
 
         let market_after = get_market_from_storage(&env, &contract_id, market_id);
         assert_eq!(market_after.status, MarketStatus::Resolved);
@@ -3587,10 +3599,7 @@ mod test {
         let outcome = true;
         let (oracle_pubkey, signature) = generate_test_keypair_and_sign(&env, market_id, outcome);
 
-        let _market_id = client.initialize_market(
-
-            &None,
-        );
+        let _market_id = client.initialize_market(&None);
 
         let market = client.get_market(&market_id);
 
@@ -3658,7 +3667,9 @@ mod test {
 
         // Step 2: Verify Ed25519 works before upgrade
         let market_id_str = String::from_str(&env, "1");
-        assert!(client.resolve_market(&market_id_str, &outcome, &signature).is_ok());
+        assert!(client
+            .resolve_market(&market_id_str, &outcome, &signature)
+            .is_ok());
 
         // Step 3: Verify market is resolved
         let market = get_market_from_storage(&env, &contract_id, 1u32);
@@ -3934,8 +3945,7 @@ mod test {
             "get_emergency_mode() must reflect TradingHalted after set"
         );
 
-        let halted_result =
-            client.try_deposit_collateral(&user, &market_id, &1_000i128);
+        let halted_result = client.try_deposit_collateral(&user, &market_id, &1_000i128);
         assert_eq!(
             halted_result,
             Err(Ok(ContractError::EmergencyModeActive)),
