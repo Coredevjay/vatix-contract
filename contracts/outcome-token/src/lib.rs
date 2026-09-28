@@ -16,6 +16,25 @@
 //! | `Config`                                 | `OutcomeTokenConfig` | Admin and market contract addresses |
 //! | `Balance(u32, Address, TokenKind)`       | `i128`    | Per-user, per-market, per-side token balance|
 //! | `TotalSupply(u32, TokenKind)`            | `i128`    | Per-market, per-side total token supply     |
+//!
+//! ## Transfer rules (Issue #903)
+//!
+//! Outcome tokens are **non-transferable** in this release. The contract
+//! exposes no `transfer`, `transfer_from`, or `approve` entrypoint, so
+//! balances can change only through the market contract (the sole mint/burn
+//! authority stored in `Config`). This is a deliberate, fail-closed decision:
+//!
+//! - The market contract stays the source of truth for positions and payouts;
+//!   a peer-to-peer transfer path could desync outcome balances from market
+//!   positions and settlement accounting.
+//! - No new privileged or user-facing surface is added (deny-by-default).
+//!
+//! If transfers are added later they MUST: require `from.require_auth()`,
+//! reject non-positive amounts (`InvalidAmount`) and self-transfers, fail with
+//! `InsufficientBalance` rather than going negative, reject while paused
+//! (`ContractPaused`) and once the market is resolved
+//! (`TransferBlockedAfterResolve`), leave `TotalSupply` unchanged, and ship
+//! behind a storage-version bump with a documented rollback.
 
 mod error;
 mod events;
@@ -138,11 +157,13 @@ impl OutcomeTokenContract {
         storage::get_pending_market_contract(&env)
     }
 
-    /// Pause the contract, blocking `mint`, `burn`, and `transfer`.
+    /// Pause the contract.
     ///
-    /// Only the stored admin may call this. Once paused, all three token
-    /// mutation entrypoints reject with [`ContractError::ContractPaused`]
-    /// until the admin calls [`Self::unpause`].
+    /// Only the stored admin may call this. Sets the pause flag that any
+    /// token-mutation entrypoint must check, rejecting with
+    /// [`ContractError::ContractPaused`] until the admin calls
+    /// [`Self::unpause`]. Outcome tokens are non-transferable (see the
+    /// module-level transfer rules).
     ///
     /// # Errors
     /// - [`ContractError::Unauthorized`] — `admin` is not the stored admin.
@@ -228,5 +249,88 @@ impl OutcomeTokenContract {
         storage::set_config(&env, &config);
         events::emit_metadata_updated(&env, &name, &symbol);
         Ok(())
+    }
+
+    /// Mint `amount` tokens of `kind` (Yes or No) for `user` in `market_id`.
+    ///
+    /// Only the registered market contract may call this function.
+    pub fn mint(
+        env: Env,
+        market_id: u32,
+        user: Address,
+        kind: TokenKind,
+        amount: i128,
+    ) -> Result<(), ContractError> {
+        if amount <= 0 {
+            return Err(ContractError::InvalidAmount);
+        }
+        if storage::is_paused(&env) {
+            return Err(ContractError::ContractPaused);
+        }
+        // Storage-version guard (Issue #696): a stale/partially-upgraded
+        // deployment must fail closed here rather than let `mint` write
+        // balances/supply under a storage layout the compiled contract no
+        // longer understands.
+        storage::assert_version(&env)?;
+        let config = storage::get_config(&env);
+        config.market_contract.require_auth();
+
+        let balance = storage::get_balance(&env, market_id, &user, &kind);
+        let new_balance = balance.checked_add(amount).ok_or(ContractError::Overflow)?;
+        storage::set_balance(&env, market_id, &user, &kind, new_balance);
+
+        let supply = storage::get_total_supply(&env, market_id, &kind);
+        let new_supply = supply.checked_add(amount).ok_or(ContractError::Overflow)?;
+        storage::set_total_supply(&env, market_id, &kind, new_supply);
+
+        events::emit_token_minted(&env, market_id, &user, kind, amount, new_balance);
+        Ok(())
+    }
+
+    /// Burn `amount` tokens of `kind` from `user` in `market_id`.
+    ///
+    /// Only the registered market contract may call this function. Returns
+    /// [`ContractError::InsufficientBalance`] if the user holds fewer tokens
+    /// than `amount`.
+    pub fn burn(
+        env: Env,
+        market_id: u32,
+        user: Address,
+        kind: TokenKind,
+        amount: i128,
+    ) -> Result<(), ContractError> {
+        if amount <= 0 {
+            return Err(ContractError::InvalidAmount);
+        }
+        if storage::is_paused(&env) {
+            return Err(ContractError::ContractPaused);
+        }
+        storage::assert_version(&env)?;
+        let config = storage::get_config(&env);
+        config.market_contract.require_auth();
+
+        let balance = storage::get_balance(&env, market_id, &user, &kind);
+        if balance < amount {
+            return Err(ContractError::InsufficientBalance);
+        }
+        let new_balance = balance - amount;
+        storage::set_balance(&env, market_id, &user, &kind, new_balance);
+
+        let supply = storage::get_total_supply(&env, market_id, &kind);
+        let new_supply = supply - amount;
+        storage::set_total_supply(&env, market_id, &kind, new_supply);
+
+        events::emit_token_burned(&env, market_id, &user, kind, amount, new_balance);
+        Ok(())
+    }
+
+    /// Return the token balance for a specific `(market_id, user, kind)` triple.
+    pub fn balance(env: Env, market_id: u32, user: Address, kind: TokenKind) -> i128 {
+        storage::get_balance(&env, market_id, &user, &kind)
+    }
+
+    /// Return the total outstanding supply for a `(market_id, kind)` pair.
+    pub fn total_supply(env: Env, market_id: u32, kind: TokenKind) -> i128 {
+        storage::get_total_supply(&env, market_id, &kind)
     }
 }

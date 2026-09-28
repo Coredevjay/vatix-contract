@@ -38,6 +38,7 @@ fn make_market(client: &MarketContractClient, env: &Env, admin: &Address, token:
         &params.end_time,
         &params.oracle_pubkey,
         &params.collateral_token,
+        &None,
     )
 }
 
@@ -199,16 +200,20 @@ fn market_resolve_market_sets_resolved_status() {
 
     let (oracle_pubkey, signing_key) = oracle_keypair(&env);
     let token = Address::generate(&env);
+    let end_time = env.ledger().timestamp() + 86_400;
     let market_id = client.initialize_market(
         &admin,
         &String::from_str(&env, "Resolved?"),
-        &(env.ledger().timestamp() + 86_400),
+        &end_time,
         &oracle_pubkey,
         &token,
+        &None,
     );
 
     let sig = sign_outcome(&env, &signing_key, market_id, true);
-    client.resolve_market(&String::from_str(&env, "1"), &true, &sig);
+    let resolver = Address::generate(&env);
+    let expires_at = end_time + 86_400;
+    client.resolve_market(&resolver, &String::from_str(&env, "1"), &true, &sig, &expires_at);
 
     let market = client.get_market(&market_id).unwrap();
     assert_eq!(market.status, MarketStatus::Resolved);
@@ -235,12 +240,14 @@ fn market_settle_position_pays_out_winner() {
         .register_stellar_asset_contract_v2(token_admin)
         .address();
 
+    let end_time = env.ledger().timestamp() + 86_400;
     let market_id = client.initialize_market(
         &admin,
         &String::from_str(&env, "Win?"),
-        &(env.ledger().timestamp() + 86_400),
+        &end_time,
         &oracle_pubkey,
         &token,
+        &None,
     );
 
     let user = Address::generate(&env);
@@ -249,7 +256,9 @@ fn market_settle_position_pays_out_winner() {
     client.update_position(&user, &market_id, &(100 * STROOPS), &0i128, &5_000i128);
 
     let sig = sign_outcome(&env, &signing_key, market_id, true);
-    client.resolve_market(&String::from_str(&env, "1"), &true, &sig);
+    let resolver = Address::generate(&env);
+    let expires_at = end_time + 86_400;
+    client.resolve_market(&resolver, &String::from_str(&env, "1"), &true, &sig, &expires_at);
 
     let payout = client.settle_position(&user, &market_id);
     assert_eq!(payout, 100 * STROOPS);
@@ -277,12 +286,14 @@ fn market_batch_settle_positions_settles_multiple_users() {
         .address();
     let sac = StellarAssetClient::new(&env, &token);
 
+    let end_time = env.ledger().timestamp() + 86_400;
     let market_id = client.initialize_market(
         &admin,
         &String::from_str(&env, "Batch?"),
-        &(env.ledger().timestamp() + 86_400),
+        &end_time,
         &oracle_pubkey,
         &token,
+        &None,
     );
 
     let user1 = Address::generate(&env);
@@ -295,7 +306,9 @@ fn market_batch_settle_positions_settles_multiple_users() {
     client.update_position(&user2, &market_id, &(50 * STROOPS), &0i128, &5_000i128);
 
     let sig = sign_outcome(&env, &signing_key, market_id, true);
-    client.resolve_market(&String::from_str(&env, "1"), &true, &sig);
+    let resolver = Address::generate(&env);
+    let expires_at = end_time + 86_400;
+    client.resolve_market(&resolver, &String::from_str(&env, "1"), &true, &sig, &expires_at);
 
     let users = soroban_sdk::vec![&env, user1.clone(), user2.clone()];
     let total = client.batch_settle_positions(&market_id, &users);
@@ -824,12 +837,14 @@ fn market_settle_positions_page_and_void_market_entrypoints() {
         .register_stellar_asset_contract_v2(token_admin)
         .address();
 
+    let end_time = env.ledger().timestamp() + 86_400;
     let market_id = client.initialize_market(
         &admin,
         &String::from_str(&env, "Page settle?"),
-        &(env.ledger().timestamp() + 86_400),
+        &end_time,
         &oracle_pubkey,
         &token,
+        &None,
     );
 
     let user = Address::generate(&env);
@@ -837,7 +852,9 @@ fn market_settle_positions_page_and_void_market_entrypoints() {
     client.deposit_collateral(&user, &market_id, &(100 * STROOPS));
 
     let sig = sign_outcome(&env, &signing_key, market_id, true);
-    client.resolve_market(&String::from_str(&env, "1"), &true, &sig);
+    let resolver = Address::generate(&env);
+    let expires_at = end_time + 86_400;
+    client.resolve_market(&resolver, &String::from_str(&env, "1"), &true, &sig, &expires_at);
 
     let (payout, next_idx) = client.settle_positions_page(&market_id, &0u32, &10u32);
     assert_eq!(payout, 100 * STROOPS);

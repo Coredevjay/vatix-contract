@@ -159,7 +159,7 @@ pub fn withdraw_unused_collateral(
         return Err(ContractError::InsufficientCollateral);
     }
 
-    // 7. Update state & persist position FIRST (CEI Pattern)
+  // 7. Update state & persist position FIRST (CEI Pattern)
     let total_deducted = amount
         .checked_add(fee_amount)
         .ok_or(ContractError::ArithmeticOverflow)?;
@@ -186,8 +186,11 @@ pub fn withdraw_unused_collateral(
                 market_id.into_val(&env),
                 fee_amount.into_val(&env),
             ];
-            let _: () =
-                env.invoke_contract(&treasury_addr, &Symbol::new(&env, "collect_fee"), args);
+            let _: () = env.invoke_contract(
+                &treasury_addr,
+                &Symbol::new(&env, "collect_fee"),
+                args,
+            );
         } else {
             emit_fee_retained_no_treasury(&env, market_id, &user, fee_amount);
         }
@@ -283,9 +286,7 @@ mod tests {
         let env = setup_env();
         let user = Address::generate(&env);
         let contract_id = env.register(crate::MarketContract, ());
-        env.as_contract(&contract_id, || {
-            storage::set_version(&env);
-        });
+        env.as_contract(&contract_id, || { storage::set_version(&env); });
         env.mock_all_auths();
         let result = env.as_contract(&contract_id, || {
             withdraw_unused_collateral(env.clone(), user.clone(), 999, 1000)
@@ -354,9 +355,7 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         // locked=60, total=100 → available=40
@@ -381,9 +380,7 @@ mod tests {
         });
         assert!(result.is_ok());
         let updated = env.as_contract(&contract_id, || {
-            storage::get_position(&env, market_id, &user)
-                .unwrap()
-                .unwrap()
+            storage::get_position(&env, market_id, &user).unwrap().unwrap()
         });
         // total_deposited = 100 - 40 = 60 (still >= locked_collateral 60)
         assert_eq!(updated.total_deposited, 60);
@@ -428,9 +425,7 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         // No locked collateral, total=100 → available=100
@@ -461,11 +456,64 @@ mod tests {
         assert_eq!(user_token.balance(&user), 40);
         // Position deducted by 44 (40 + 4 fee)
         let updated = env.as_contract(&contract_id, || {
-            storage::get_position(&env, market_id, &user)
-                .unwrap()
-                .unwrap()
+            storage::get_position(&env, market_id, &user).unwrap().unwrap()
         });
         assert_eq!(updated.total_deposited, 56); // 100 - 44
+    }
+
+    /// #902: indexer reconciliation — a successful fee-bearing withdrawal emits
+    /// `fee_calculated` then `collateral_withdrawn`, and `collateral_withdrawn`
+    /// carries the requested `amount` plus a `new_total` equal to the stored
+    /// `total_deposited`. An indexer can therefore reconcile the position as
+    /// `prev_total - amount - fee_amount == new_total` from events alone.
+    #[test]
+    fn test_withdraw_events_reconcile_for_indexer() {
+        use soroban_sdk::token::StellarAssetClient;
+        use soroban_sdk::{Map, Symbol, TryIntoVal};
+        let env = setup_env();
+        let user = Address::generate(&env);
+        let market_id = 1u32;
+        let token_admin = Address::generate(&env);
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
+        let contract_id = env.register(crate::MarketContract, ());
+        let market = create_test_market(&env, market_id, &token);
+        let position = Position {
+            market_id, user: user.clone(),
+            yes_shares: 0, no_shares: 0,
+            locked_collateral: 0, total_deposited: 100, is_settled: false,
+        };
+        env.as_contract(&contract_id, || {
+            storage::set_version(&env);
+            storage::set_market(&env, market_id, &market).unwrap();
+            storage::set_position(&env, market_id, &user, &position).unwrap();
+            storage::set_fee_rate_bps(&env, 1_000); // 10%
+        });
+        env.mock_all_auths();
+        StellarAssetClient::new(&env, &token).mint(&contract_id, &200);
+        env.events().all(); // clear setup events
+        env.as_contract(&contract_id, || {
+            withdraw_unused_collateral(env.clone(), user.clone(), market_id, 40)
+        })
+        .unwrap();
+
+        let field = |name: &str| -> Option<Map<Symbol, Val>> {
+            env.events().all().iter().find_map(|e| {
+                let t0: Symbol = e.1.get(0).unwrap().into_val(&env);
+                (e.0 == contract_id && t0 == Symbol::new(&env, name))
+                    .then(|| e.2.try_into_val(&env).unwrap())
+            })
+        };
+        let fee = field("fee_calculated").expect("fee_calculated emitted");
+        let wd = field("collateral_withdrawn").expect("collateral_withdrawn emitted");
+        let fee_amount: i128 = fee.get(Symbol::new(&env, "fee_amount")).unwrap().into_val(&env);
+        let amount: i128 = wd.get(Symbol::new(&env, "amount")).unwrap().into_val(&env);
+        let new_total: i128 = wd.get(Symbol::new(&env, "new_total")).unwrap().into_val(&env);
+        assert_eq!((fee_amount, amount, new_total), (4, 40, 56));
+        assert_eq!(100 - amount - fee_amount, new_total);
+        let stored = env.as_contract(&contract_id, || {
+            storage::get_position(&env, market_id, &user).unwrap().unwrap()
+        });
+        assert_eq!(stored.total_deposited, new_total);
     }
 
     /// #377: when amount + fee > available, reject with InsufficientCollateral.
@@ -508,9 +556,7 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         let position = Position {
@@ -535,9 +581,7 @@ mod tests {
         });
         assert!(result.is_ok());
         let updated = env.as_contract(&contract_id, || {
-            storage::get_position(&env, market_id, &user)
-                .unwrap()
-                .unwrap()
+            storage::get_position(&env, market_id, &user).unwrap().unwrap()
         });
         assert_eq!(updated.total_deposited, 60); // 100 - 40, no fee
     }
@@ -554,9 +598,7 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         let position = Position {
@@ -591,9 +633,7 @@ mod tests {
 
         // total_deposited still reflects both the withdrawal and the fee.
         let updated = env.as_contract(&contract_id, || {
-            storage::get_position(&env, market_id, &user)
-                .unwrap()
-                .unwrap()
+            storage::get_position(&env, market_id, &user).unwrap().unwrap()
         });
         assert_eq!(updated.total_deposited, 56); // 100 - 40 - 4
 
@@ -622,9 +662,7 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         let position = Position {
@@ -686,9 +724,7 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         let position = Position {
@@ -728,20 +764,14 @@ mod tests {
         let (_, topics, data) = fee_collected.expect("fee_collected event must be emitted");
 
         let mid: u32 = topics.get(1).unwrap().into_val(&env);
-        assert_eq!(
-            mid, market_id,
-            "fee_collected must carry the market_id topic"
-        );
+        assert_eq!(mid, market_id, "fee_collected must carry the market_id topic");
 
         let data: Map<Symbol, Val> = data.clone().try_into_val(&env).unwrap();
         let fee_amount: i128 = data
             .get(Symbol::new(&env, "fee_amount"))
             .unwrap()
             .into_val(&env);
-        assert_eq!(
-            fee_amount, 4,
-            "fee_amount must match the 10% fee on a 40 withdraw"
-        );
+        assert_eq!(fee_amount, 4, "fee_amount must match the 10% fee on a 40 withdraw");
     }
 
     /// #711: a zero-fee (or fee-waived) withdraw must not invoke `collect_fee`
@@ -757,9 +787,7 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         let position = Position {
@@ -809,13 +837,9 @@ mod tests {
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &collateral_token);
         let position = Position {
-            market_id,
-            user: user.clone(),
-            yes_shares: 0,
-            no_shares: 0,
-            locked_collateral: 0,
-            total_deposited: 0,
-            is_settled: false,
+            market_id, user: user.clone(),
+            yes_shares: 0, no_shares: 0,
+            locked_collateral: 0, total_deposited: 0, is_settled: false,
         };
         env.as_contract(&contract_id, || {
             storage::set_version(&env);
@@ -839,20 +863,14 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         let amount = LARGE_WITHDRAW_THRESHOLD - 1;
         let position = Position {
-            market_id,
-            user: user.clone(),
-            yes_shares: 0,
-            no_shares: 0,
-            locked_collateral: 0,
-            total_deposited: amount,
-            is_settled: false,
+            market_id, user: user.clone(),
+            yes_shares: 0, no_shares: 0,
+            locked_collateral: 0, total_deposited: amount, is_settled: false,
         };
         env.as_contract(&contract_id, || {
             storage::set_version(&env);
@@ -868,10 +886,9 @@ mod tests {
         assert!(result.is_ok());
         let events = env.events().all();
         assert!(
-            !events.iter().any(|e| e
-                .topics
+            !events
                 .iter()
-                .any(|t| t.to_string().contains("large_withdraw"))),
+                .any(|e| e.topics.iter().any(|t| t.to_string().contains("large_withdraw"))),
             "LargeWithdraw audit event should not be emitted below threshold"
         );
     }
@@ -885,20 +902,14 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         let amount = LARGE_WITHDRAW_THRESHOLD;
         let position = Position {
-            market_id,
-            user: user.clone(),
-            yes_shares: 0,
-            no_shares: 0,
-            locked_collateral: 0,
-            total_deposited: amount,
-            is_settled: false,
+            market_id, user: user.clone(),
+            yes_shares: 0, no_shares: 0,
+            locked_collateral: 0, total_deposited: amount, is_settled: false,
         };
         env.as_contract(&contract_id, || {
             storage::set_version(&env);
@@ -914,10 +925,9 @@ mod tests {
         assert!(result.is_ok());
         let events = env.events().all();
         assert!(
-            events.iter().any(|e| e
-                .topics
+            events
                 .iter()
-                .any(|t| t.to_string().contains("large_withdraw"))),
+                .any(|e| e.topics.iter().any(|t| t.to_string().contains("large_withdraw"))),
             "LargeWithdraw audit event should be emitted at/above threshold"
         );
     }
@@ -951,7 +961,12 @@ mod tests {
             storage::set_market(&env, market_id, &market).unwrap();
             storage::set_position(&env, market_id, &user, &position).unwrap();
             // Record a deposit at ledger time 0 (current timestamp in test env).
-            storage::set_last_deposit_time(&env, market_id, &user, env.ledger().timestamp());
+            storage::set_last_deposit_time(
+                &env,
+                market_id,
+                &user,
+                env.ledger().timestamp(),
+            );
         });
         env.mock_all_auths();
 
@@ -978,9 +993,7 @@ mod tests {
         let user = Address::generate(&env);
         let market_id = 1u32;
         let token_admin = Address::generate(&env);
-        let token = env
-            .register_stellar_asset_contract_v2(token_admin)
-            .address();
+        let token = env.register_stellar_asset_contract_v2(token_admin).address();
         let contract_id = env.register(crate::MarketContract, ());
         let market = create_test_market(&env, market_id, &token);
         let withdraw_amount = 500i128;
